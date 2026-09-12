@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Friend Hangout Tracker</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div>
+        <p class="eyebrow">THE GROUP TRACKER</p>
+        <h1>Friend Hangout Tracker</h1>
+        <p class="subtitle">Who actually showed up?</p>
+      </div>
+      <button id="addBtn" class="primary">+ Add Hangout</button>
+    </header>
+
+    <section class="stats">
+      <div class="stat-card"><span>Total Hangouts</span><strong id="totalHangouts">0</strong></div>
+      <div class="stat-card"><span>Total Check-ins</span><strong id="totalCheckins">0</strong></div>
+      <div class="stat-card"><span>Group Attendance</span><strong id="groupAttendance">0%</strong></div>
+      <div class="stat-card"><span>Most Consistent</span><strong id="topFriend">—</strong></div>
+    </section>
+
+    <main>
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Leaderboard</h2>
+            <p>Ranked by attendance percentage</p>
+          </div>
+        </div>
+        <div id="leaderboard" class="leaderboard"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading">
+          <div>
+            <h2>Hangouts</h2>
+            <p>Click a hangout to view or edit attendance.</p>
+          </div>
+        </div>
+        <div id="hangouts" class="hangouts"></div>
+      </section>
+    </main>
+
+    <footer>
+      <button id="resetBtn" class="danger">Reset All Data</button>
+      <span>Data is saved automatically in this browser.</span>
+    </footer>
+  </div>
+
+  <div id="modal" class="modal hidden">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="modalTitle">Add Hangout</h2>
+          <p>Check everyone who came.</p>
+        </div>
+        <button id="closeBtn" class="icon-btn">×</button>
+      </div>
+
+      <label>Hangout name
+        <input id="hangoutName" type="text" placeholder="e.g. Friday Night" />
+      </label>
+      <label>Date
+        <input id="hangoutDate" type="date" />
+      </label>
+
+      <div class="attendance-title">
+        <span>Who came?</span>
+        <button id="toggleAll" class="text-btn">Select all</button>
+      </div>
+      <div id="peopleList" class="people-list"></div>
+
+      <div class="modal-actions">
+        <button id="deleteBtn" class="danger hidden">Delete Hangout</button>
+        <div>
+          <button id="cancelBtn" class="secondary">Cancel</button>
+          <button id="saveBtn" class="primary">Save Hangout</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
