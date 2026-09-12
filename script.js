@@ -5,18 +5,58 @@ const people = [
   "Abbas Degenrate",
   "Ameer First One There",
   "Mujtaba Doctor",
+  "Asad Bricked",
   "Ali Mehdi Copper",
   "Syedna Bhabi"
 ];
 
-let hangouts = JSON.parse(localStorage.getItem("friendHangouts") || "[]");
+let hangouts = [];
 let editingId = null;
 
 const $ = id => document.getElementById(id);
 const modal = $("modal");
 
-function saveData() {
-  localStorage.setItem("friendHangouts", JSON.stringify(hangouts));
+let supabaseClient = null;
+
+function isConfigured() {
+  return SUPABASE_URL && SUPABASE_ANON_KEY &&
+    !SUPABASE_URL.includes("PASTE_YOUR") &&
+    !SUPABASE_ANON_KEY.includes("PASTE_YOUR");
+}
+
+function getClient() {
+  if (!isConfigured()) return null;
+  if (!supabaseClient) {
+    supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  }
+  return supabaseClient;
+}
+
+async function loadData() {
+  const client = getClient();
+  if (!client) {
+    showSetupMessage();
+    return;
+  }
+
+  const { data, error } = await client
+    .from("hangouts")
+    .select("id,name,date,attendees")
+    .order("date", { ascending: false });
+
+  if (error) {
+    console.error(error);
+    alert("Could not load the shared tracker. Check your Supabase setup and RLS policies.");
+    return;
+  }
+
+  hangouts = data || [];
+  render();
+}
+
+function showSetupMessage() {
+  $("hangouts").innerHTML = `<div class="empty">Supabase is not connected yet.<br>Paste your Supabase URL and public/anon key into <b>supabase-config.js</b>.</div>`;
+  render();
 }
 
 function formatDate(date) {
@@ -28,7 +68,7 @@ function formatDate(date) {
 
 function render() {
   const total = hangouts.length;
-  const checkins = hangouts.reduce((sum, h) => sum + h.attendees.length, 0);
+  const checkins = hangouts.reduce((sum, h) => sum + (h.attendees || []).length, 0);
   const possible = total * people.length;
   const groupPct = possible ? Math.round(checkins / possible * 100) : 0;
 
@@ -37,7 +77,7 @@ function render() {
   $("groupAttendance").textContent = groupPct + "%";
 
   const stats = people.map(name => {
-    const count = hangouts.filter(h => h.attendees.includes(name)).length;
+    const count = hangouts.filter(h => (h.attendees || []).includes(name)).length;
     const pct = total ? Math.round(count / total * 100) : 0;
     return { name, count, pct };
   }).sort((a,b) => b.pct - a.pct || b.count - a.count);
@@ -58,25 +98,25 @@ function render() {
 
   const sorted = [...hangouts].sort((a,b) => b.date.localeCompare(a.date));
   $("hangouts").innerHTML = sorted.length ? sorted.map(h => `
-    <div class="hangout" onclick="editHangout('${h.id}')">
+    <div class="hangout" onclick="editHangout(${h.id})">
       <div>
         <div class="hangout-title">${escapeHtml(h.name || "Hangout")}</div>
         <div class="hangout-date">${formatDate(h.date)}</div>
       </div>
-      <div class="checkins">${h.attendees.length}/${people.length} showed up →</div>
+      <div class="checkins">${(h.attendees || []).length}/${people.length} showed up →</div>
     </div>
   `).join("") : `<div class="empty">No hangouts yet.<br>Add the first one and start keeping score.</div>`;
 }
 
 function openModal(h = null) {
-  editingId = h?.id || null;
+  editingId = h?.id ?? null;
   $("modalTitle").textContent = h ? "Edit Hangout" : "Add Hangout";
   $("hangoutName").value = h?.name || "";
   $("hangoutDate").value = h?.date || new Date().toISOString().slice(0,10);
   $("deleteBtn").classList.toggle("hidden", !h);
 
   $("peopleList").innerHTML = people.map(name => {
-    const checked = h?.attendees.includes(name) ? "checked" : "";
+    const checked = h?.attendees?.includes(name) ? "checked" : "";
     return `<label class="person"><input type="checkbox" value="${escapeHtml(name)}" ${checked}> <span>${escapeHtml(name)}</span></label>`;
   }).join("");
 
@@ -99,52 +139,70 @@ $("toggleAll").onclick = () => {
   $("toggleAll").textContent = shouldCheck ? "Deselect all" : "Select all";
 };
 
-$("saveBtn").onclick = () => {
+$("saveBtn").onclick = async () => {
+  const client = getClient();
+  if (!client) return alert("Connect Supabase first by filling in supabase-config.js.");
+
   const name = $("hangoutName").value.trim() || "Hangout";
   const date = $("hangoutDate").value;
   const attendees = [...document.querySelectorAll("#peopleList input:checked")].map(x => x.value);
 
   if (!date) return alert("Please choose a date.");
 
-  const record = { id: editingId || Date.now().toString(), name, date, attendees };
-  if (editingId) {
-    hangouts = hangouts.map(h => h.id === editingId ? record : h);
+  let error;
+  if (editingId !== null) {
+    ({ error } = await client.from("hangouts").update({ name, date, attendees }).eq("id", editingId));
   } else {
-    hangouts.push(record);
+    ({ error } = await client.from("hangouts").insert({ name, date, attendees }));
   }
 
-  saveData();
-  render();
+  if (error) {
+    console.error(error);
+    return alert("Could not save the hangout. Check your Supabase table and policies.");
+  }
+
   closeModal();
+  await loadData();
 };
 
-$("deleteBtn").onclick = () => {
-  if (!editingId) return;
-  if (confirm("Delete this hangout?")) {
-    hangouts = hangouts.filter(h => h.id !== editingId);
-    saveData();
-    render();
-    closeModal();
+$("deleteBtn").onclick = async () => {
+  const client = getClient();
+  if (!client || editingId === null) return;
+  if (!confirm("Delete this hangout?")) return;
+
+  const { error } = await client.from("hangouts").delete().eq("id", editingId);
+  if (error) {
+    console.error(error);
+    return alert("Could not delete the hangout.");
   }
+
+  closeModal();
+  await loadData();
 };
 
-$("resetBtn").onclick = () => {
-  if (confirm("Reset every hangout and attendance record?")) {
-    hangouts = [];
-    saveData();
-    render();
+$("resetBtn").onclick = async () => {
+  const client = getClient();
+  if (!client) return alert("Connect Supabase first by filling in supabase-config.js.");
+  if (!confirm("Reset every hangout and attendance record for everyone?")) return;
+
+  const { error } = await client.from("hangouts").delete().not("id", "is", null);
+  if (error) {
+    console.error(error);
+    return alert("Could not reset the tracker.");
   }
+
+  await loadData();
 };
 
 window.editHangout = id => {
-  const h = hangouts.find(x => x.id === id);
+  const h = hangouts.find(x => Number(x.id) === Number(id));
   if (h) openModal(h);
 };
 
 function escapeHtml(str) {
-  return str.replace(/[&<>"']/g, c => ({
+  return String(str).replace(/[&<>"']/g, c => ({
     "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;"
   }[c]));
 }
 
-render();
+loadData();
